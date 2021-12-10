@@ -1,4 +1,3 @@
-import cv2
 import sys
 import pathlib
 import importlib.resources as resources
@@ -6,18 +5,36 @@ import importlib.resources as resources
 from . import resources as mustaches
 from . import cascades
 
-def mustache_image(image_file, output_filename=None):
-    with resources.path(mustaches, 'mustache.jpg') as mustache_file:
-        mustache = cv2.imread(str(mustache_file), cv2.IMREAD_COLOR)
+import cv2
+import numpy as np
 
-    image = cv2.imread(image_file, cv2.IMREAD_UNCHANGED)
+def mustache_image(image_file, output_filename=None):
+    with open(image_file, 'rb') as img:
+        image_data = img.read()
+
+    mustached_img_data = mustache_image_data(image_data)
+
+    with open(output_filename, 'wb') as output:
+        output.write(mustached_img_data)
+
+    return mustached_img_data
+
+def get_default_mustache_data():
+    with resources.open_binary(mustaches, 'mustache.jpg') as mustache:
+        mustache_data = mustache.read()
+
+    return mustache_data
+
+def mustache_image_data(image_data, mustache_data=get_default_mustache_data()):
+    image = cv2.imdecode(np.fromstring(image_data, np.uint8), cv2.IMREAD_UNCHANGED)
+    mustache = cv2.imdecode(np.fromstring(mustache_data, np.uint8), cv2.IMREAD_UNCHANGED)
 
     image_mustachified = _mustache_image(image, mustache)
 
-    if output_filename is not None:
-        cv2.imwrite(output_filename, image_mustachified)
+    _, image_array = cv2.imencode('.JPEG', image_mustachified)
+    image_array = np.array(image_array)
 
-    return image_mustachified
+    return image_array.tobytes()
 
 def _mustache_image(image, mustache):
     grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
