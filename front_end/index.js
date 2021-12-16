@@ -19,7 +19,18 @@ Webcam.attach( '#captureCanvas' );
 button.addEventListener('click', () => {
   console.log('test');
   Webcam.snap( data => {
-    window.open(data);
+    $.ajax({
+      type: "POST",
+      url: "http://localhost:5000/mustachify",
+      data: data,
+      success: dat => {
+        var image = document.createElement('img');
+        image.src = dat;
+        capture.appendChild(image);
+        console.log(dat);
+      }
+    });
+    //window.open(data);
   });
 });
 
