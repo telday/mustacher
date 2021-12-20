@@ -2,6 +2,8 @@ import tempfile
 import os
 
 from flask import Flask, request
+from flask.cli import FlaskGroup
+
 from data_url import DataURL, construct_data_url
 from mustacher.mustacher import mustache_image_data
 
@@ -28,5 +30,8 @@ def after_request(response):
     header['Access-Control-Allow-Methods'] = 'OPTIONS, HEAD, GET, POST, DELETE, PUT'
     return response
 
+def serve(*args):
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
 if __name__ == "__main__":
-    app.run()
+    serve()
