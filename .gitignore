@@ -4,5 +4,6 @@
 build/
 dist/
 *.pyc
+**/*/.DS_Store
 __pycache__/
 .mustacher/
