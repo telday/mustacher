@@ -21,7 +21,7 @@ button.addEventListener('click', () => {
   Webcam.snap( data => {
     $.ajax({
       type: "POST",
-      url: "http://localhost:5000/mustachify",
+      url: "/v1/mustachify",
       data: data,
       success: dat => {
         var image = document.createElement('img');
