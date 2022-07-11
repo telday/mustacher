@@ -1,10 +1,15 @@
-import cv2
+import argparse
 import sys
-from .mustacher import mustache_image
-from . import resources as mustaches
 import importlib.resources as resources
 
+from .mustacher import mustache_image
+from . import resources as mustaches
 
-imagePath = sys.argv[1]
+import cv2
 
-mustached = mustache_image(imagePath, output_filename='out.jpeg')
+parser = argparse.ArgumentParser(description='Add a mustache to faces on an image')
+parser.add_argument('filename', help='The name of the input image')
+
+args = parser.parse_args()
+
+mustached = mustache_image(args.filename, output_filename='out.jpeg')
