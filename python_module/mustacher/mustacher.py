@@ -2,11 +2,12 @@ import sys
 import pathlib
 import math
 import logging
-import importlib.resources as resources
+import importlib.resources
 
 from . import resources as mustaches
 from . import cascades
 from . import imlog
+from . import imutils
 
 import cv2
 import numpy as np
@@ -26,10 +27,14 @@ def mustache_image(image_file, output_filename=None):
     return mustached_img_data
 
 def get_default_mustache_data():
-    with resources.open_binary(mustaches, 'mustache.jpg') as mustache:
+    with importlib.resources.open_binary(mustaches, 'mustache.jpg') as mustache:
         mustache_data = mustache.read()
 
     return mustache_data
+
+def get_default_mustache():
+    image_data = get_default_mustache_data()
+    return cv2.imdecode(np.fromstring(image_data, np.uint8), cv2.IMREAD_UNCHANGED)
 
 def mustache_image_data(image_data, mustache_data=get_default_mustache_data()):
     image = cv2.imdecode(np.fromstring(image_data, np.uint8), cv2.IMREAD_UNCHANGED)
@@ -43,107 +48,99 @@ def mustache_image_data(image_data, mustache_data=get_default_mustache_data()):
 def mustache_raw_image(image, mustache_data=get_default_mustache_data()):
     mustache = cv2.imdecode(np.fromstring(mustache_data, np.uint8), cv2.IMREAD_UNCHANGED)
 
-    return _mustache_image(image, mustache)
+    return Image(image).image
 
-def _mustache_image(image, mustache):
-    grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+class DetectedObject:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
 
-    faces = detect(grayscale_image, FACES)
-    eyes = detect(grayscale_image, EYES)
-    eyes = get_eyes_for_face(faces[0], eyes)
-    if len(eyes) == 2:
-        angle = -1 * object_angle(eyes[0], eyes[1])
-        mustache = rotate_image(mustache, angle)
+    def contains(self, other):
+        other_x, other_y = other.center()
 
-    logging.info(f"Detected {len(faces)} faces")
-    logging.info(f"Detected {len(eyes)} eyes")
+        within_horizontal_bounds = self.x <= other_x and self.x + self.width >= other_x
+        within_vertical_bounds = self.y <= other_y and self.y + self.height >= other_y
 
-    imlog.log_image_objects(image, [*eyes, *faces])
+        return within_vertical_bounds and within_horizontal_bounds
 
-    for face in faces:
-        image = put_mustache_on_face(image, face, mustache)
+    def center(self):
+        return (self.x + int(0.5 * self.width), self.y + int(0.5 * self.height))
 
-    return image
+class Face(DetectedObject):
+    def select_eyes(self, eyes):
+        eyes = [i for i in eyes if self.contains(i)]
+        if len(eyes) <= 2:
+            self.eyes = eyes
+        else:
+            # Temporary way of deciding which 2 eyes to use
+            self.eyes = eyes[:2]
 
-def get_eyes_for_face(face, eyes):
-    """Determines which of the eyes belong to the given face"""
-    eyes = [i for i in eyes if eye_within_face(face, i)]
+    def upper_lip_coords(self):
+        # Use standard face proportions to find the upper lip
+        return (self.y + int(.69 * self.height), self.x + int(.5 * self.width))
 
-    return eye_decider(face, eyes)
+    def angle(self):
+        # If we didn't find 2 eyes for the given face assume it is vertical
+        if len(self.eyes) < 2:
+            return 0
+        else:
+            return object_angle(*self.eyes)
 
-def eye_decider(face, eyes):
-    """Decides which of the detected eyes are actually on that face"""
-    if len(eyes) <= 2:
-        return eyes
+class Image:
+    def __init__(self, image: np.ndarray):
+        self.image = image
+        self.width = self.image.shape[0]
+        self.height = self.image.shape[1]
 
-    return eyes[:2]
+        self.__apply_cascades()
+        for face in self.faces:
+            face.select_eyes(self.eyes)
+            self.image = self.place_mustache(face)
 
-def eye_within_face(face, eye):
-    face_x, face_y, face_w, face_h = face
-    _, _, eye_w, eye_h = eye
-    eye_x = eye[0] + int(0.5 * eye_w)
-    eye_y = eye[1] + int(0.5 * eye_h)
+    def __apply_cascades(self):
+        """"""
+        grayscale_image = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
-    return face_x <= eye_x and face_y <= eye_y and face_x + face_w >= eye_x and face_y + face_h >= eye_y
+        self.faces = [Face(*coords) for coords in imutils.detect(grayscale_image, FACES)]
+        self.eyes = [DetectedObject(*coords) for coords in imutils.detect(grayscale_image, EYES)]
 
-def put_mustache_on_face(image, face, mustache):
-    """ """
-    face_cols, face_rows = (face[2], face[3])
+        logging.info(f"Detected {len(self.faces)} faces")
+        logging.info(f"Detected {len(self.eyes)} eyes")
 
-    # Resize the mustache in proportion to the face size
-    new_mustache_size = (int(face_cols / 2), int(face_rows / 2))
-    mustache = cv2.resize(mustache, new_mustache_size, cv2.INTER_AREA)
+        imlog.log_image_objects(grayscale_image, [*self.faces, *self.eyes])
 
-    mustache_h, mustache_w = (mustache.shape[0], mustache.shape[1])
+    def place_mustache(self, face):
+        # Get the top left corner of the mustache overlay
+        mustache = self.get_mustache(face)
 
-    # Find the center of the mustache overlay
-    mustache_coords_center = (face[1] + int(.69 * face[3]), face[0] + int(.5 * face[2]))
-    # Get the top left corner of the mustache overlay
-    must_c, must_r = (
-        mustache_coords_center[0] - int(.5 * mustache_h),
-        mustache_coords_center[1] - int(0.5 * mustache_h)
-    )
+        mustache_h, mustache_w = (mustache.shape[0], mustache.shape[1])
+        must_c, must_r = (
+            face.upper_lip_coords()[0] - int(0.5 * mustache_h),
+            face.upper_lip_coords()[1] - int(0.5 * mustache_h)
+        )
 
-    im_width = image.shape[0]
-    im_height = image.shape[1]
+        mustache = imutils.pad_image(
+            mustache, self.image.shape[:2], (must_c, must_r), (255, 255, 255)
+        )
 
-    left_pad = must_c - 1
-    right_pad = im_width - must_c - mustache_w + 1
-    top_pad = must_r - 1
-    bottom_pad = im_height - must_r - mustache_h + 1
+        # Invert the mustache (we want what is currently black to be visisble)
+        mustache = cv2.bitwise_not(mustache)
+        return cv2.subtract(self.image, mustache)
 
-    mustache = np.pad(
-        mustache,
-        ((left_pad, right_pad), (top_pad, bottom_pad), (0, 0)),
-        mode="constant", constant_values=255
-    )
-    # Invert the mustache (we want what is currently black to be visisble)
-    mustache = cv2.bitwise_not(mustache)
-    return cv2.subtract(image, mustache)
+    def get_mustache(self, face):
+        mustache = get_default_mustache()
+
+        mustache = imutils.rotate_image(mustache, -1 * face.angle())
+        new_mustache_size = (int(face.width / 2), int(face.height / 2))
+        mustache = cv2.resize(mustache, new_mustache_size, cv2.INTER_AREA)
+
+        return mustache
 
 def object_angle(obj1, obj2):
-    """Determines the angle between (the center point of) two objects"""
-    c1 = (obj1[0] + int(obj1[2] / 2), obj1[1] + int(obj1[3] / 2))
-    c2 = (obj2[0] + int(obj2[2] / 2), obj2[1] + int(obj2[3] / 2))
+    """Determines the angle between (the center point of) two detected objects"""
+    c1 = (obj1.x + int(obj1.width / 2), obj1.y + int(obj1.height / 2))
+    c2 = (obj2.x + int(obj2.width / 2), obj2.y + int(obj2.height / 2))
     dist = math.dist(c1, c2)
     return math.degrees(math.acos(abs(c1[0] - c2[0]) / dist))
-
-def rotate_image(image, degrees):
-    # This will rotate the image by "degrees" degrees using an affine transform
-    height, width = image.shape[:2]
-    M = cv2.getRotationMatrix2D(center=(height / 2, width / 2), angle=degrees, scale=1)
-    image = cv2.warpAffine(image, M, image.shape[:2], borderValue=(255, 255, 255))
-    return image
-
-def detect(image, sheet):
-    """Detect objects in an image based on the given cascade sheet name,
-    the image must be a single layer (greyscale usually)"""
-    with resources.path(cascades, sheet) as cascade_sheet_file:
-        cascade_sheet = cv2.CascadeClassifier(str(cascade_sheet_file))
-    objects = cascade_sheet.detectMultiScale(
-            image,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(30, 30),
-        )
-    return objects

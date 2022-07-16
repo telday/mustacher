@@ -29,8 +29,8 @@ def log_image_objects(image, objects):
     image = image.copy()
 
     for obj in objects:
-        top_left = (obj[0], obj[1])
-        bottom_right = (obj[0] + obj[2], obj[1] + obj[3])
+        top_left = (obj.x, obj.y)
+        bottom_right = (obj.x + obj.width, obj.y + obj.height)
         color = (255, 0, 0)
         image = cv2.rectangle(image, top_left, bottom_right, color, 5)
 
