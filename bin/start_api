@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-set -e
-
-# Makes sure we are in the root project directory
-cd "$(dirname "$0")/.."
-
-cd api
-
-python mustache_api.py
