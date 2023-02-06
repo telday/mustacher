@@ -25,6 +25,11 @@ def log_image(image):
 
 @ensure_log_dir
 def log_image_objects(image, objects):
+    """Logs an image to a file with each detected object marked. Useful for debugging.
+    Args:
+        image (np.array): The image to log
+        objects (List[DetectedObject]): The objects we want to mark
+    """
     im_name = time.time()
     image = image.copy()
 
