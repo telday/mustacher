@@ -5,6 +5,8 @@ import os.path
 import cv2
 import numpy as np
 
+from mustacher.config import Configuration
+
 LOGDIR = "logs"
 
 def ensure_log_dir(wrapped):
@@ -16,6 +18,8 @@ def ensure_log_dir(wrapped):
 
 @ensure_log_dir
 def log_image(image):
+    if not Configuration.debug():
+        return
     im_name = time.time()
     _, image_array = cv2.imencode('.JPEG', image)
     encoded_image = np.array(image_array)
@@ -25,6 +29,13 @@ def log_image(image):
 
 @ensure_log_dir
 def log_image_objects(image, objects):
+    """Logs an image to a file with each detected object marked. Useful for debugging.
+    Args:
+        image (np.array): The image to log
+        objects (List[DetectedObject]): The objects we want to mark
+    """
+    if not Configuration.debug():
+        return
     im_name = time.time()
     image = image.copy()
 
