@@ -6,41 +6,37 @@ import numpy as np
 from mustacher.config import Configuration
 from mustacher.utils.image import OverlayImage
 import mustacher.utils.image
+import mustacher.utils.detect_object
 import mustacher.imlog
 
-class DeriveFaceAngle:
-    def __init__(self, detect_object=mustacher.utils.image.DetectObject()):
-        self.detect_object = detect_object
+def derive_face_angle(face: np.ndarray):
+    """Takes in an image which is cropped down to just a detected face and
+    attempts to find the angle of the given face.
 
-    def call(self, face: np.ndarray):
-        self.face = face
-        eyes = self.__eyes()
-        # TODO rework this algorithm to better determine which of the
-        # detected eyes are real if there are more than 2 detected
-        if len(eyes) < 2:
-            # We assume a 0 angle if we can't find 2 or more eyes
-            return 0
+    Args:
+        face (np.ndarray)
+    Returns: (float) The calulated angle in radians
+    """
+    eyes = mustacher.utils.detect_object.detect_object(
+        face.object_image,
+        mustacher.utils.detect_object.CascadeSheets.EYE.value
+    )
+    # TODO rework this algorithm to better determine which of the
+    # detected eyes are real if there are more than 2 detected
+    if len(eyes) < 2:
+        # We assume a 0 angle if we can't find 2 or more eyes
+        return 0
 
-        angle = mustacher.utils.image.object_angle(*eyes[:2])
-        logging.debug(f"Calculated object angle: {angle}")
-        return angle
-
-    def __call__(self, *args):
-        return self.call(*args)
-
-    def __eyes(self):
-        return self.detect_object.call(
-            self.face.object_image,
-            mustacher.utils.image.CascadeSheets.EYE.value
-        )
+    angle = mustacher.utils.image.object_angle(*eyes[:2])
+    logging.debug(f"Calculated object angle: {angle}")
+    return angle
 
 class MustacheFace:
-    def __init__(self, derive_face_angle=DeriveFaceAngle(), overlay_image=OverlayImage()):
-        self.derive_face_angle = derive_face_angle
+    def __init__(self, overlay_image=OverlayImage()):
         self.overlay_image = overlay_image
 
-    def call(self, face: mustacher.utils.image.DetectedObject):
-        face_angle = self.derive_face_angle(face)
+    def call(self, face: mustacher.utils.detect_object.DetectedObject):
+        face_angle = derive_face_angle(face)
         mustache = Configuration.mustache_array()
         mustache = mustacher.utils.image.rotate_image(mustache, -1 * face_angle)
 
@@ -69,16 +65,14 @@ class MustacheFace:
 
 class MustacheImage:
     def __init__(self,
-        detect_object=mustacher.utils.image.DetectObject(),
         mustache_face=MustacheFace()
      ):
-        self.detect_object = detect_object
         self.mustache_face = mustache_face
 
     def call(self, image):
-        faces = self.detect_object.call(
+        faces = mustacher.utils.detect_object.detect_object(
             image,
-            mustacher.utils.image.CascadeSheets.FACE.value
+            mustacher.utils.detect_object.CascadeSheets.FACE.value
         )
         for face in faces:
             mustached_face = self.mustache_face(face)
