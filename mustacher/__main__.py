@@ -25,7 +25,7 @@ def stream_video():
 
         print(frame.__class__, frame.shape)
         try:
-            im = mustache_raw_image(frame)
+            im = MustacheImage().call(frame)
         except Exception as e:
             print(e)
             im = frame
@@ -55,3 +55,5 @@ if args.f:
     image = cv2.imdecode(np.fromstring(image_data, np.uint8), cv2.IMREAD_UNCHANGED)
     final_image = MustacheImage().call(image)
     cv2.imshow('frame', final_image)
+elif args.stream:
+    stream_video()
